@@ -8,15 +8,15 @@ abstract contract ERC7629 is IERC7629 {
     // ERC-721 related errors
     error ERC721InvalidApprover();
     error ERC721InvalidOperator();
-    error ERC721InvalidSender(address receiver);
-    error ERC721InvalidReceiver(address receiver);
-    error ERC721IncorrectOwner(address sender, uint256 tokenId, address owner);
+    error ERC721InvalidSender();
+    error ERC721InvalidReceiver();
+    error ERC721IncorrectOwner();
     error ERC721NonexistentToken();
     error ERC721AccountBalanceOverflow();
 
     // ERC-20 related errors
     error TotalSupplyOverflow();
-    error ERC20InvalidSpender(address spender);
+    error ERC20InvalidSpender();
     error ERC20InsufficientAllowance();
     error ERC20InvalidSender();
     error ERC20InvalidReceiver();
@@ -337,12 +337,13 @@ abstract contract ERC7629 is IERC7629 {
      * @return True if the approval was successful.
      */
     function _erc20Approve(address spender, uint256 value) internal returns (bool) {
-        if (spender == address(0)) {
-            revert ERC20InvalidSpender(spender);
-        }
-
         /// @solidity memory-safe-assembly
         assembly {
+            if iszero(spender) {
+                mstore(0x00, 0xdeed3d66) // `ERC20InvalidSpender()`.
+                revert(0x1c, 0x04)
+            }
+
             // Compute the allowance slot and store the value.
             mstore(0x20, spender)
             mstore(0x0c, _ERC20_ALLOWANCE_SLOT_SEED)
@@ -482,11 +483,19 @@ abstract contract ERC7629 is IERC7629 {
         if (to.code.length > 0) {
             try IERC721Receiver(to).onERC721Received(msg.sender, from, tokenId, data) returns (bytes4 retval) {
                 if (retval != IERC721Receiver.onERC721Received.selector) {
-                    revert ERC721InvalidReceiver(to);
+                    /// @solidity memory-safe-assembly
+                    assembly {
+                        mstore(0x00, 0xb2e2a9c1) // `ERC721InvalidReceiver()`.
+                        revert(0x1c, 0x04)
+                    }
                 }
             } catch (bytes memory reason) {
                 if (reason.length == 0) {
-                    revert ERC721InvalidReceiver(to);
+                    /// @solidity memory-safe-assembly
+                    assembly {
+                        mstore(0x00, 0xb2e2a9c1) // `ERC721InvalidReceiver()`.
+                        revert(0x1c, 0x04)
+                    }
                 } else {
                     /// @solidity memory-safe-assembly
                     assembly {
@@ -522,9 +531,10 @@ abstract contract ERC7629 is IERC7629 {
      * @return True if the transfer was successful.
      */
     function _erc20TransferFrom(address from, address to, uint256 value) internal returns (bool) {
-        address spender = msg.sender;
         /// @solidity memory-safe-assembly
         assembly {
+            let spender := caller()
+
             // Compute the allowance slot and load its value.
             mstore(0x20, spender)
             mstore(0x0c, _ERC20_ALLOWANCE_SLOT_SEED)
@@ -636,15 +646,26 @@ abstract contract ERC7629 is IERC7629 {
      * @param tokenId The ID of the ERC-721 token to transfer.
      */
     function _erc721TransferFrom(address from, address to, uint256 tokenId) internal {
-        if (to == address(0)) {
-            revert ERC721InvalidReceiver(address(0));
+        /// @solidity memory-safe-assembly
+        assembly {
+            if iszero(to) {
+                mstore(0x00, 0xb2e2a9c1) // `ERC721InvalidReceiver()`.
+                revert(0x1c, 0x04)
+            }
         }
 
         address previousOwner = _updateERC721(to, tokenId);
-        if (previousOwner == address(0)) {
-            revert ERC721NonexistentToken();
-        } else if (previousOwner != from) {
-            revert ERC721IncorrectOwner(from, tokenId, previousOwner);
+
+        /// @solidity memory-safe-assembly
+        assembly {
+            if iszero(previousOwner) {
+                mstore(0x00, 0x52f4210a) // `ERC721NonexistentToken()`.
+                revert(0x1c, 0x04)
+            }
+            if iszero(eq(previousOwner, from)) {
+                mstore(0x00, 0x4829a139) // `ERC721IncorrectOwner()`.
+                revert(0x1c, 0x04)
+            }
         }
     }
 
@@ -809,15 +830,24 @@ abstract contract ERC7629 is IERC7629 {
      * @param tokenId The ID of the ERC-721 token to be minted.
      */
     function _mintERC721(address to, uint256 tokenId) internal {
-        if (to == address(0)) {
-            revert ERC721InvalidReceiver(address(0));
+        /// @solidity memory-safe-assembly
+        assembly {
+            if iszero(to) {
+                mstore(0x00, 0xb2e2a9c1) // `ERC721InvalidReceiver()`.
+                revert(0x1c, 0x04)
+            }
         }
+
         address previousOwner = _updateERC721(to, tokenId);
-        if (previousOwner != address(0)) {
-            revert ERC721InvalidSender(address(0));
-        }
-        unchecked {
-            minted++;
+
+        /// @solidity memory-safe-assembly
+        assembly {
+            if iszero(iszero(previousOwner)) {
+                mstore(0x00, 0x73378f7d) // `ERC721InvalidSender()`.
+                revert(0x1c, 0x04)
+            }
+
+            sstore(minted.slot, add(sload(minted.slot), 1))
         }
     }
 
@@ -827,8 +857,13 @@ abstract contract ERC7629 is IERC7629 {
      */
     function _burnERC721(uint256 tokenId) internal {
         address previousOwner = _updateERC721(address(0), tokenId);
-        if (previousOwner == address(0)) {
-            revert ERC721NonexistentToken();
+
+        /// @solidity memory-safe-assembly
+        assembly {
+            if iszero(previousOwner) {
+                mstore(0x00, 0x52f4210a) // `ERC721NonexistentToken()`.
+                revert(0x1c, 0x04)
+            }
         }
     }
 
